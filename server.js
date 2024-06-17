@@ -1,58 +1,54 @@
-import express from 'express'
-import { createServer } from 'http'
-import path from 'path'
-import { Socket } from 'socket.io'
-import { toBuffer } from 'qrcode'
-import fetch from 'node-fetch'
+const express = require('express');
+const { exec } = require('child_process');
+const app = express();
+const port = 3000;
 
-function connect(conn, PORT) {
-    let app = global.app = express()
-    console.log(app)
-    let server = global.server = createServer(app)
-    // app.use(express.static(path.join(__dirname, 'views')))
-    let _qr = 'invalid'
+app.get('/', (req, res) => {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Run NPM Start</title>
+    </head>
+    <body>
+        <button id="startButton">Start NPM</button>
+        <p id="output"></p>
 
-    conn.ev.on('connection.update', function appQR({ qr }) {
-        if (qr) _qr = qr
-    })
+        <script>
+            document.getElementById('startButton').addEventListener('click', () => {
+                fetch('/start-npm')
+                    .then(response => response.text())
+                    .then(data => {
+                        document.getElementById('output').innerText = data;
+                    })
+                    .catch(error => {
+                        document.getElementById('output').innerText = \`Error: \${error}\`;
+                    });
+            });
+        </script>
+    </body>
+    </html>
+  `;
+  res.send(html);
+});
 
-    app.use(async (req, res) => {
-        res.setHeader('content-type', 'image/png')
-        res.end(await toBuffer(_qr))
-    })
-
-    // let io = new Socket(server)
-    // io.on('connection', socket => {
-    //     let { unpipeEmit } = pipeEmit(conn, socket, 'conn-')
-    //     socket.on('disconnect', unpipeEmit)
-    // })
-
-    server.listen(PORT, () => {
-        console.log('App listened on port', PORT)
-        if (opts['keepalive']) keepAlive()
-    })
-}
-
-function pipeEmit(event, event2, prefix = '') {
-    let old = event.emit
-    event.emit = function (event, ...args) {
-        old.emit(event, ...args)
-        event2.emit(prefix + event, ...args)
+app.get('/start-npm', (req, res) => {
+  exec('npm start', (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).send(`Error: ${error.message}`);
     }
-    return {
-        unpipeEmit() {
-            event.emit = old
-        }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      return res.status(500).send(`Stderr: ${stderr}`);
     }
-}
+    console.log(`stdout: ${stdout}`);
+    res.send(`stdout: ${stdout}`);
+  });
+});
 
-function keepAlive() {
-    const url = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-    if (/(\/\/|\.)undefined\./.test(url)) return
-    setInterval(() => {
-        fetch(url).catch(console.error)
-    }, 5 * 1000 * 60)
-}
-
-
-export default connect
+app.listen(port, () => {
+  console.log(`Server listening at http://localhost:${port}`);
+});
